@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+
+die() {
+	echo "$*" 1>&2
+	exit 1
+}
+
+usage() {
+	cat <<EOF
+yaml to json:
+	y2j < yaml > json
+	j2y -d < yaml > json
+
+json to yaml:
+	j2y < json > yaml
+	y2j -d < json > yaml
+
+filtered yaml:
+	yq {jq-filter} < yaml > yaml
+EOF
+}
+
+
+y2j() {
+	if test "$1" = "-d"; then
+		shift 1
+		j2y "$@"
+	else
+		python -c 'import sys, yaml, json; json.dump(yaml.load(sys.stdin), sys.stdout, indent=4)' | (
+			if test $# -gt 0; then
+				jq "$@"
+			else
+				cat
+			fi
+		)
+	fi
+}
+
+j2y() {
+	if test "$1" = "-d"; then
+		shift 1
+		y2j "$@"
+	else
+		(
+			if test $# -gt 0; then
+				jq "$@"
+			else
+				cat
+			fi
+		) | python -c 'import sys, yaml, json; yaml.safe_dump(json.load(sys.stdin), sys.stdout, default_flow_style=False)'
+	fi
+}
+
+yq() {
+	test $# -gt 0 || die "usage: yq {jq-filter}"
+	y2j | jq "$@" | j2y | sed '/^\.\.\.$/ d'
+}
+
+case $(basename "$0") in
+	j2y)
+		j2y "$@"
+	;;
+	y2j)
+		y2j "$@"
+	;;
+	yq)
+		yq "$@"
+	;;
+	*)
+		die "unable to determine execution mode - check the name of script - '$(dirname $0)'"
+	;;
+esac
